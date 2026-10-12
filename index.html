@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#171326">
+<title>MADDY OS</title>
+<style>
+:root{color-scheme:dark;--bg:#11101b;--panel:#1d1b2b;--panel2:#29263b;--accent:#a78bfa;--text:#f5f3ff;--muted:#b9b4cf}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#34224d,var(--bg) 50%);color:var(--text);font:15px system-ui,-apple-system,sans-serif;min-height:100vh}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #ffffff1c;background:#11101bcc;position:sticky;top:0;backdrop-filter:blur(12px)}
+.logo{font-weight:800;letter-spacing:.08em}.logo span{color:var(--accent)}.status{font-size:12px;color:var(--muted)}
+main{max-width:1000px;margin:auto;padding:22px 16px 90px}.hero h1{font-size:clamp(30px,6vw,52px);margin:8px 0}.hero p{color:var(--muted);line-height:1.6}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:14px;margin-top:22px}
+.card{background:#1b1929eF;border:1px solid #ffffff1c;border-radius:18px;padding:17px;box-shadow:0 10px 35px #0002}.card h2{font-size:17px;margin:0 0 12px}.muted{color:var(--muted);font-size:13px}
+button,input,textarea{font:inherit}button{background:var(--accent);color:#1a1230;border:0;border-radius:10px;padding:10px 13px;font-weight:700;cursor:pointer}button.secondary{background:var(--panel2);color:var(--text);border:1px solid #ffffff20}
+input,textarea{width:100%;background:#100f19;color:var(--text);border:1px solid #ffffff24;border-radius:10px;padding:11px;margin:6px 0}
+.terminal{height:210px;overflow:auto;background:#0b0b11;border-radius:12px;padding:12px;font:13px ui-monospace,monospace;white-space:pre-wrap;color:#d9f99d}.row{display:flex;gap:8px;align-items:center}.row input{flex:1;min-width:0}.row button{flex-shrink:0}
+.file{display:flex;justify-content:space-between;gap:8px;align-items:center;border-bottom:1px solid #ffffff12;padding:8px 0;overflow-wrap:anywhere}.file button{padding:6px 9px}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:24px}
+</style>
+</head>
+<body>
+<header><div class="logo">MADDY <span>OS</span></div><div class="status" id="status">Connecting to API…</div></header>
+<main>
+<section class="hero"><div class="muted">WEB DESKTOP · STARTER BUILD</div><h1>Your workspace.<br>On your terms.</h1><p>A mobile-friendly MADDY OS interface with a safe demo terminal, browser file manager, and Python API connection.</p></section>
+<div class="grid">
+<section class="card"><h2>⌁ System status</h2><p id="health">Checking backend…</p><button class="secondary" id="refresh">Refresh status</button></section>
+<section class="card"><h2>▣ File manager</h2><p class="muted">Demo files are stored in this browser on this device, not on the server.</p><div class="row"><input id="filename" placeholder="filename.txt" aria-label="Filename"><button id="newfile">New</button></div><div id="files"></div></section>
+<section class="card"><h2>› Terminal</h2><div class="terminal" id="output">MADDY OS safe demo terminal\nType help to see available commands.\n</div><form class="row" id="terminalForm"><input id="command" autocomplete="off" placeholder="Enter command…" aria-label="Terminal command"><button>Run</button></form></section>
+<section class="card"><h2>ƒ Python arithmetic</h2><p class="muted">The API safely evaluates basic arithmetic only. It does not run arbitrary Python code.</p><form id="mathForm"><input id="expression" placeholder="(12 + 8) * 3" aria-label="Arithmetic expression"><button>Calculate</button></form><p id="mathResult"></p></section>
+<section class="card"><h2>Next modules</h2><p class="muted">Add authentication, remote storage, a properly isolated Python execution service, and QEMU on a separate supported compute host. These are not included in this starter.</p></section>
+</div>
+</main>
+<footer>MADDY OS · Browser prototype · No arbitrary server shell execution</footer>
+<script>
+const $=id=>document.getElementById(id);
+async function api(path,body){const r=await fetch(path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error||'Request failed');return data}
+async function health(){try{const d=await api('/api/health');$('status').textContent='API online';$('health').textContent=`Connected · Python ${d.python} · ${d.host} host · ${new Date(d.utc).toLocaleString()}`}catch(e){$('status').textContent='API unavailable';$('health').textContent='Could not reach backend. '+e.message}}
+$('refresh').onclick=health;
+$('terminalForm').onsubmit=async e=>{e.preventDefault();const cmd=$('command').value.trim();if(!cmd)return;const out=$('output');out.textContent+='\\n$ '+cmd+'\\n';$('command').value='';try{const d=await api('/api/terminal',{command:cmd});if(d.output==='__CLEAR__')out.textContent='';else out.textContent+=d.output+'\\n'}catch(err){out.textContent+=err.message+'\\n'}out.scrollTop=out.scrollHeight};
+$('mathForm').onsubmit=async e=>{e.preventDefault();$('mathResult').textContent='Calculating…';try{const d=await api('/api/python-math',{expression:$('expression').value});$('mathResult').textContent='Result: '+d.result}catch(err){$('mathResult').textContent='Error: '+err.message}};
+const KEY='maddy-os-demo-files-v1';
+function readFiles(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch{return {}}}
+function renderFiles(){const files=readFiles();$('files').innerHTML='';for(const [name,content] of Object.entries(files)){const row=document.createElement('div');row.className='file';const label=document.createElement('span');label.textContent='📄 '+name;const actions=document.createElement('span');const open=document.createElement('button');open.className='secondary';open.textContent='Open';open.onclick=()=>{const val=prompt('Edit '+name,content);if(val!==null){files[name]=val;localStorage.setItem(KEY,JSON.stringify(files));renderFiles()}};const del=document.createElement('button');del.className='secondary';del.textContent='×';del.setAttribute('aria-label','Delete '+name);del.onclick=()=>{if(confirm('Delete '+name+'?')){delete files[name];localStorage.setItem(KEY,JSON.stringify(files));renderFiles()}};actions.append(open,del);row.append(label,actions);$('files').append(row)}if(!Object.keys(files).length)$('files').textContent='No files yet.'}
+$('newfile').onclick=()=>{const name=$('filename').value.trim();if(!name)return alert('Enter a filename');if(name.includes('/')||name.includes('\\\\'))return alert('Use a filename without folders');const files=readFiles();if(name in files)return alert('That file already exists');files[name]='';localStorage.setItem(KEY,JSON.stringify(files));$('filename').value='';renderFiles()};
+health();renderFiles();
+</script>
+</body>
+</html>
