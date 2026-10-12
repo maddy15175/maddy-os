@@ -49,7 +49,7 @@ def safe_math(expression: str):
 
 @app.get("/")
 def index():
-    return send_from_directory("static", "index.html")
+    return send_from_directory(".", "index.html")
 
 @app.get("/api/health")
 def health():
