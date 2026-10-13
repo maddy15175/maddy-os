@@ -1,0 +1,49 @@
+# --- Hugging Face hosted chat integration ---
+# Add these imports with the other imports at the top of app.py:
+# import requests
+#
+# Add the route below after the existing routes. Configure HF_TOKEN as a
+# secret environment variable in Render; never place it in frontend code.
+#
+# @app.get("/ai")
+# def ai_chat_page():
+#     return send_from_directory(".", "hf-chat.html")
+#
+# @app.post("/api/hf-chat")
+# def hf_chat():
+#     import requests
+#     token = os.environ.get("HF_TOKEN")
+#     if not token:
+#         return jsonify({"error": "Hosted AI is not configured. Set HF_TOKEN in your hosting environment or choose browser mode."}), 503
+#     body = request.get_json(silent=True) or {}
+#     messages = body.get("messages")
+#     if not isinstance(messages, list) or not messages or len(messages) > 12:
+#         return jsonify({"error": "Send between 1 and 12 chat messages."}), 400
+#     safe_messages = []
+#     for message in messages:
+#         if not isinstance(message, dict) or message.get("role") not in ("user", "assistant") or not isinstance(message.get("content"), str):
+#             return jsonify({"error": "Invalid message format."}), 400
+#         content = message["content"][:4000]
+#         safe_messages.append({"role": message["role"], "content": content})
+#     # Use a model available to your Hugging Face account. Hosted inference
+#     # availability and pricing vary by model and account.
+#     payload = {
+#         "model": os.environ.get("HF_MODEL", "Qwen/Qwen2.5-7B-Instruct"),
+#         "messages": [{"role": "system", "content": "You are MADDY Chat, a helpful assistant. Be clear and honest."}] + safe_messages,
+#         "max_tokens": 400,
+#         "temperature": 0.7
+#     }
+#     try:
+#         response = requests.post(
+#             "https://router.huggingface.co/v1/chat/completions",
+#             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+#             json=payload, timeout=45
+#         )
+#         if response.status_code >= 400:
+#             # Avoid returning provider details or secrets to public users.
+#             return jsonify({"error": f"Hugging Face inference returned HTTP {response.status_code}. Check HF_MODEL, token permissions, and inference access."}), 502
+#         data = response.json()
+#         reply = data["choices"][0]["message"]["content"]
+#         return jsonify({"reply": str(reply)[:12000]})
+#     except (requests.RequestException, KeyError, IndexError, ValueError):
+#         return jsonify({"error": "Hugging Face inference request failed or returned an unexpected response."}), 502

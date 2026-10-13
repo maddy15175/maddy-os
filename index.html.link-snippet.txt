@@ -1,0 +1,2 @@
+<!-- Add this inside the existing .grid in index.html -->
+<section class="card"><h2>🤗 MADDY Chat AI</h2><p class="muted">Chat with a Hugging Face hosted model or try a browser-based model.</p><a href="/ai"><button type="button">Open MADDY Chat AI</button></a></section>

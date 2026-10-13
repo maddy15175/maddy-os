@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#171326">
+<title>MADDY Chat · Hugging Face</title>
+<style>
+:root{color-scheme:dark;--bg:#11101b;--panel:#1d1b2b;--panel2:#29263b;--accent:#a78bfa;--text:#f5f3ff;--muted:#b9b4cf}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#34224d,var(--bg) 50%);color:var(--text);font:15px system-ui,sans-serif;min-height:100vh}
+header{display:flex;justify-content:space-between;align-items:center;padding:15px 18px;border-bottom:1px solid #ffffff1c;background:#11101bcc;position:sticky;top:0}
+a{color:var(--accent)}main{max-width:850px;margin:auto;padding:20px 14px 35px}.card{background:#1b1929ef;border:1px solid #ffffff1c;border-radius:18px;padding:16px}
+h1{font-size:clamp(26px,5vw,40px);margin:5px 0}p,.muted{color:var(--muted);line-height:1.5}.settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:14px 0}
+select,textarea,input,button{font:inherit}select,textarea,input{width:100%;background:#100f19;color:var(--text);border:1px solid #ffffff24;border-radius:10px;padding:11px}
+button{background:var(--accent);color:#1a1230;border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}button:disabled{opacity:.5;cursor:wait}
+#messages{display:flex;flex-direction:column;gap:12px;margin:16px 0;min-height:190px}.msg{padding:12px 14px;border-radius:13px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}.user{background:#35294d;align-self:flex-end;max-width:92%}.assistant{background:#11101b;border:1px solid #ffffff15;align-self:stretch}.row{display:flex;gap:8px;align-items:end}.row textarea{resize:vertical;min-height:52px;max-height:180px;flex:1}.status{font-size:12px;color:var(--muted)}.small{font-size:12px}
+</style>
+</head>
+<body>
+<header><strong>MADDY <span style="color:var(--accent)">CHAT</span></strong><a href="/">← Back to MADDY OS</a></header>
+<main>
+<div class="card">
+<div class="muted">HUGGING FACE INTEGRATION</div><h1>Chat with AI</h1>
+<p>Choose hosted inference or run a compatible model in this browser. Browser models download to your device and may need substantial RAM and bandwidth.</p>
+<div class="settings">
+<label>AI mode<select id="mode"><option value="auto">Hosted AI, browser fallback</option><option value="cloud">Hosted Hugging Face only</option><option value="browser">Browser model only</option></select></label>
+<label>Browser model<select id="model"><option value="onnx-community/Qwen2.5-0.5B-Instruct">Qwen2.5 0.5B Instruct (small)</option><option value="onnx-community/gemma-3-270m-it-ONNX">Gemma 3 270M IT (small)</option></select></label>
+</div>
+<div id="status" class="status" role="status">Ready. Hosted AI requires HF_TOKEN configured on the server; browser mode downloads a model.</div>
+<div id="messages" aria-live="polite"><div class="msg assistant">Hi! I'm MADDY Chat. Ask me a question to get started.</div></div>
+<form id="chatForm"><div class="row"><textarea id="prompt" required maxlength="4000" placeholder="Message MADDY Chat…" aria-label="Message"></textarea><button id="send">Send</button></div></form>
+<div class="small muted" style="margin-top:10px">Privacy: messages sent to hosted AI leave this browser. Browser inference runs on this device after model download. Do not submit secrets.</div>
+</div>
+</main>
+<script type="module">
+import { pipeline } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
+const $=id=>document.getElementById(id);
+let generator=null, loadedModel='';
+const history=[];
+function addMessage(role,text){const el=document.createElement('div');el.className='msg '+role;el.textContent=text;$('messages').append(el);el.scrollIntoView({block:'nearest'});return el}
+async function browserReply(prompt,slot){
+ const model=$('model').value;
+ if(!generator||loadedModel!==model){
+   if(generator?.dispose) await generator.dispose();
+   generator=null;loadedModel='';
+   $('status').textContent='Downloading/loading browser model… first load may be large.';
+   generator=await pipeline('text-generation',model,{dtype:'q4',progress_callback:p=>{
+     if(p.status==='progress'&&p.file&&p.progress!=null)$('status').textContent=`Loading ${p.file}: ${Math.round(p.progress)}%`;
+   }});
+   loadedModel=model;
+ }
+ $('status').textContent='Generating on this device…';
+ const messages=[{role:'system',content:'You are MADDY Chat, a helpful assistant. Answer clearly and honestly.'},...history.slice(-8),{role:'user',content:prompt}];
+ const result=await generator(messages,{max_new_tokens:160,temperature:0.7,do_sample:true});
+ const seq=result?.[0]?.generated_text;
+ let answer='';
+ if(Array.isArray(seq)){const last=seq.filter(x=>x.role==='assistant').at(-1);answer=last?.content||''}
+ else if(typeof seq==='string'){answer=seq.slice(seq.lastIndexOf(prompt)+prompt.length).trim()}
+ if(!answer) answer=JSON.stringify(result);
+ return answer;
+}
+async function hostedReply(prompt){
+ const r=await fetch('/api/hf-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[...history.slice(-8),{role:'user',content:prompt}]})});
+ const data=await r.json();
+ if(!r.ok)throw new Error(data.error||'Hosted inference failed');
+ return data.reply;
+}
+$('chatForm').addEventListener('submit',async e=>{
+ e.preventDefault();const prompt=$('prompt').value.trim();if(!prompt)return;
+ $('prompt').value='';addMessage('user',prompt);const slot=addMessage('assistant','Thinking…');$('send').disabled=true;
+ const mode=$('mode').value;
+ try{
+   let answer;
+   if(mode==='browser')answer=await browserReply(prompt,slot);
+   else if(mode==='cloud')answer=await hostedReply(prompt);
+   else{try{answer=await hostedReply(prompt)}catch(err){$('status').textContent='Hosted AI unavailable; trying browser model…';answer=await browserReply(prompt,slot)}}
+   slot.textContent=answer||'(The model returned an empty response.)';
+   history.push({role:'user',content:prompt},{role:'assistant',content:answer||''});
+   $('status').textContent=mode==='browser'?'Answered on this device.':'Response complete.';
+ }catch(err){slot.textContent='Error: '+err.message;$('status').textContent='Could not get a response. Check server configuration, model compatibility, or browser memory.'}
+ finally{$('send').disabled=false}
+});
+</script>
+</body></html>
